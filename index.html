@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sensor QC Dashboard — Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ---- Design tokens ---- */
+    --bg:            #0C0E12;
+    --panel:         #14171E;
+    --panel-alt:     #1B1F28;
+    --border:        #262B36;
+    --border-soft:   #1E222B;
+    --text:          #E7E9EE;
+    --text-dim:      #8890A0;
+    --text-faint:    #565E6E;
+
+    --cyan:          #45D9C7;   /* passed / VQC / batch accent */
+    --amber:         #F2B84B;   /* mid-severity / SQC / batch 2 */
+    --coral:         #EF6F6C;   /* failed / high leakage / batch flag */
+    --violet:        #9C8CF0;   /* NISER / batch 3 */
+    --blue:          #5B9BF2;   /* batch 1 */
+
+    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+    --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+
+  body{
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(69,217,199,0.06), transparent 40%),
+      radial-gradient(circle at 85% 10%, rgba(156,140,240,0.05), transparent 35%);
+    color: var(--text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  .wrap{
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+  }
+
+  /* ---------- Header ---------- */
+  header.top{
+    display:flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+  .title-block .eyebrow{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .title-block h1{
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 600;
+    margin: 0 0 6px 0;
+    letter-spacing: -0.01em;
+  }
+  .title-block p{
+    margin:0;
+    color: var(--text-dim);
+    font-size: 14.5px;
+    max-width: 520px;
+    line-height: 1.5;
+  }
+
+  .status-badge{
+    display:flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding: 5px 10px;
+    border-radius: 20px;
+    background: rgba(242,184,75,0.1);
+    border: 1px solid rgba(242,184,75,0.35);
+    color: var(--amber);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .pill::before{
+    content:'';
+    width:6px; height:6px;
+    border-radius:50%;
+    background: var(--amber);
+    box-shadow: 0 0 6px var(--amber);
+  }
+  .sync-time{ color: var(--text-faint); }
+
+  /* ---------- Pipeline signature element ---------- */
+  .pipeline-card{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px 8px;
+    margin-bottom: 24px;
+  }
+  .pipeline-card .card-heading{
+    display:flex;
+    justify-content: space-between;
+    align-items:center;
+    margin-bottom: 4px;
+  }
+  .card-heading h2{
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0;
+  }
+  .card-heading .hint{
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  .pipeline-svg{ display:block; }
+  .pipe-connector{ stroke: var(--border); stroke-width: 2; stroke-dasharray: 4 4; }
+  .pipe-circle{ fill: var(--panel-alt); stroke: var(--cyan); stroke-width: 2; }
+  .pipe-index{ font-family: var(--font-mono); font-size: 10px; fill: var(--text-faint); letter-spacing: 0.08em; }
+  .pipe-value{ font-family: var(--font-mono); font-size: 13px; fill: var(--text); font-weight: 600; }
+  .pipe-label{ font-family: var(--font-sans); font-size: 12px; fill: var(--text-dim); }
+  .pipe-yield{ font-family: var(--font-mono); font-size: 10.5px; fill: var(--cyan); }
+
+  /* ---------- Tabs ---------- */
+  nav.tabs{
+    display:flex;
+    gap: 6px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .tab-btn{
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .tab-btn:hover{ color: var(--text); }
+  .tab-btn.active{ color: var(--cyan); border-bottom-color: var(--cyan); }
+
+  /* ---------- Panels ---------- */
+  .panel{ display:none; }
+  .panel.active{ display:block; animation: fade 0.25s ease; }
+  @keyframes fade{ from{opacity:0; transform: translateY(4px);} to{opacity:1; transform: translateY(0);} }
+
+  .panel-head{
+    display:flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .panel-head h3{
+    font-family: var(--font-mono);
+    font-size: 16px;
+    margin: 0 0 4px 0;
+    font-weight: 600;
+  }
+  .panel-head p{
+    margin:0;
+    color: var(--text-dim);
+    font-size: 13px;
+    max-width: 560px;
+  }
+
+  /* ---------- KPI cards ---------- */
+  .kpi-row{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .kpi-card{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .kpi-card .kpi-label{
+    font-size: 11.5px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+  .kpi-card .kpi-value{
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .kpi-card .kpi-value.accent{ color: var(--cyan); }
+  .kpi-card .kpi-value.warn{ color: var(--amber); }
+  .kpi-card .kpi-value.flag{ color: var(--coral); }
+  .kpi-card .kpi-sub{
+    font-size: 11.5px;
+    color: var(--text-faint);
+    margin-top: 4px;
+  }
+
+  /* ---------- Chart card ---------- */
+  .chart-card{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .chart-container{ width: 100%; }
+  .chart-svg{ overflow: visible; font-family: var(--font-mono); }
+  .gridline{ stroke: var(--border-soft); stroke-width: 1; }
+  .axis-line{ stroke: var(--border); stroke-width: 1; }
+  .axis-label{ fill: var(--text-faint); font-size: 11px; }
+  .axis-title{ fill: var(--text-dim); font-size: 11px; }
+  .bar{ transition: opacity 0.15s ease; cursor: pointer; }
+  .bar:hover{ opacity: 0.75; }
+  .bar-total{ fill: var(--text-dim); font-size: 11px; font-weight:600; }
+  .line-path{ opacity: 0.9; }
+  .line-point{ cursor: pointer; stroke: var(--bg); stroke-width: 1.5; transition: r 0.15s ease; }
+  .line-point:hover{ r: 6; }
+
+  .legend{
+    display:flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .legend-item{
+    display:flex;
+    align-items:center;
+    gap: 7px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+  .legend-swatch{ width:10px; height:10px; border-radius: 3px; }
+
+  /* ---------- Batch selector ---------- */
+  .batch-controls{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .batch-controls .label{
+    font-size: 12px;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .segmented{
+    display:flex;
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+  }
+  .batch-btn{
+    background:none;
+    border:none;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    padding: 7px 14px;
+    border-radius: 7px;
+    cursor:pointer;
+    transition: all 0.15s ease;
+  }
+  .batch-btn.active{ background: var(--cyan); color: #06110F; font-weight: 600; }
+
+  .batch-note{
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: var(--panel-alt);
+    border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--cyan);
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .batch-note b{ color: var(--text); }
+
+  /* ---------- Footer ---------- */
+  footer{
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+  footer .obj-title{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    margin-bottom: 12px;
+  }
+  footer ul{
+    list-style:none;
+    margin:0; padding:0;
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  footer li{
+    font-size: 12.5px;
+    color: var(--text-dim);
+    display:flex;
+    gap: 8px;
+    align-items: flex-start;
+    line-height: 1.4;
+  }
+  footer li::before{
+    content:'✓';
+    color: var(--cyan);
+    font-weight: 700;
+    flex-shrink:0;
+  }
+  footer .disclaimer{
+    margin-top: 20px;
+    font-size: 11.5px;
+    color: var(--text-faint);
+  }
+
+  /* ---------- Tooltip ---------- */
+  .tooltip{
+    position: fixed;
+    pointer-events: none;
+    background: #05070A;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 7px;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+    z-index: 100;
+    white-space: nowrap;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+  }
+
+  @media (max-width: 760px){
+    .kpi-row{ grid-template-columns: repeat(2, 1fr); }
+    footer ul{ grid-template-columns: repeat(2, 1fr); }
+    .title-block h1{ font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="top">
+    <div class="title-block">
+      <div class="eyebrow">Sensor QC · Assembly Monitoring</div>
+      <h1>Sensor Testing &amp; Analysis Dashboard</h1>
+      <p>Interactive summaries of sensor flow, leakage current quality, and cross-site measurement consistency — built to complement the existing production database.</p>
+    </div>
+    <div class="status-badge">
+      <span class="pill">DEMO · SYNTHETIC DATA</span>
+      <span class="sync-time" id="syncTime"></span>
+    </div>
+  </header>
+
+  <!-- Signature element: sensor flow pipeline -->
+  <div class="pipeline-card">
+    <div class="card-heading">
+      <h2>Production Pipeline</h2>
+      <span class="hint">node size ∝ sensors available at stage</span>
+    </div>
+    <div id="pipeline" class="chart-container"></div>
+  </div>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-target="panel-availability">01 · Availability</button>
+    <button class="tab-btn" data-target="panel-leakage-overall">02 · Leakage (Overall)</button>
+    <button class="tab-btn" data-target="panel-leakage-batch">03 · Leakage (Per Batch)</button>
+    <button class="tab-btn" data-target="panel-multitest">04 · Multi-Test Comparison</button>
+  </nav>
+
+  <!-- ================= PANEL 1: AVAILABILITY ================= -->
+  <section class="panel active" id="panel-availability">
+    <div class="panel-head">
+      <div>
+        <h3>Sensor Availability Tracking</h3>
+        <p>Sensors available vs. passed at each stage of the workflow, from DCA through Module Production.</p>
+      </div>
+    </div>
+    <div class="kpi-row" id="availKpis"></div>
+    <div class="chart-card">
+      <div id="availChart" class="chart-container"></div>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--cyan)"></span>Passed to next stage</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--coral)"></span>Failed / held back</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PANEL 2: LEAKAGE OVERALL ================= -->
+  <section class="panel" id="panel-leakage-overall">
+    <div class="panel-head">
+      <div>
+        <h3>Leakage Current Distribution — Overall</h3>
+        <p>Distribution of leakage current across all tested sensors, binned by severity to flag abnormal behavior.</p>
+      </div>
+    </div>
+    <div class="kpi-row" id="leakKpis"></div>
+    <div class="chart-card">
+      <div id="leakChart" class="chart-container"></div>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--cyan)"></span>0–1000 nA (nominal)</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--blue)"></span>1000–2000 nA</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--amber)"></span>2000–10000 nA</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--coral)"></span>&gt;10000 nA (flagged)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PANEL 3: LEAKAGE PER BATCH ================= -->
+  <section class="panel" id="panel-leakage-batch">
+    <div class="panel-head">
+      <div>
+        <h3>Leakage Current Distribution — Per Batch</h3>
+        <p>Select a batch (~80 sensors each) to inspect its distribution against the overall population, scaled for fair comparison.</p>
+      </div>
+    </div>
+    <div class="batch-controls">
+      <span class="label">Batch</span>
+      <div class="segmented" id="batchSelector">
+        <button class="batch-btn active" data-batch="1">Batch 1</button>
+        <button class="batch-btn" data-batch="2">Batch 2</button>
+        <button class="batch-btn" data-batch="3">Batch 3</button>
+      </div>
+    </div>
+    <div class="kpi-row" id="batchKpis"></div>
+    <div class="chart-card">
+      <div id="batchChart" class="chart-container"></div>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--cyan)"></span>Selected batch (count)</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--text-faint)"></span>Overall distribution (scaled to batch size)</div>
+      </div>
+      <div class="batch-note" id="batchNote"></div>
+    </div>
+  </section>
+
+  <!-- ================= PANEL 4: MULTI-TEST ================= -->
+  <section class="panel" id="panel-multitest">
+    <div class="panel-head">
+      <div>
+        <h3>Multi-Test Comparison per Sensor</h3>
+        <p>VQC, SQC, and NISER leakage measurements for the same 20 sensors, plotted together to study consistency and systematic offsets between test sites.</p>
+      </div>
+    </div>
+    <div class="kpi-row" id="multiKpis"></div>
+    <div class="chart-card">
+      <div id="multiChart" class="chart-container"></div>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--cyan)"></span>VQC · Vendor Quality Check</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--amber)"></span>SQC · Site Quality Check</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--violet)"></span>NISER Measurement</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="obj-title">Objective</div>
+    <ul>
+      <li>Provide a clear overview of sensor workflow and status</li>
+      <li>Help monitor quality through leakage current distributions</li>
+      <li>Enable batch-level diagnostics</li>
+      <li>Allow comparison of measurements across testing stages</li>
+    </ul>
+    <div class="disclaimer">This demo runs entirely on synthetic sample data generated in-browser to validate the design. Next step: connect each panel to the live production database.</div>
+  </footer>
+
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+/* =========================================================================
+   SEEDED RANDOM NUMBER GENERATION
+   (mulberry32 PRNG + Box-Muller normal transform + log-normal sampling)
+   Seeded so the demo dataset is reproducible across page loads.
+   ========================================================================= */
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(42);
+
+function randNormal(){
+  let u = 0, v = 0;
+  while(u === 0) u = rng();
+  while(v === 0) v = rng();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function randLognormal(mu, sigma){
+  return Math.exp(mu + sigma * randNormal());
+}
+function clamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
+function mean(arr){ return arr.reduce((a,b)=>a+b,0) / arr.length; }
+function median(arr){
+  const s = [...arr].sort((a,b)=>a-b);
+  const mid = Math.floor(s.length/2);
+  return s.length % 2 ? s[mid] : (s[mid-1] + s[mid]) / 2;
+}
+
+/* =========================================================================
+   DATA GENERATION  (mirrors the Python sensor_testing_simulation.py logic)
+   ========================================================================= */
+const STAGES = ["DCA", "NISER Received", "Tail Bonding", "HV/IV Test", "Module Production"];
+const BIN_EDGES = [0, 1000, 2000, 10000, Infinity];
+const BIN_LABELS = ["0-1000", "1000-2000", "2000-10000", ">10000"];
+const BIN_COLORS = ["var(--cyan)", "var(--blue)", "var(--amber)", "var(--coral)"];
+
+function generateAvailability(){
+  let current = 550 + Math.floor(rng() * 70); // initial batch: 550-619
+  const available = [], passed = [];
+  STAGES.forEach((s, i) => {
+    if (i > 0){
+      const attrition = Math.floor(rng() * (0.04 * current + 1));
+      current -= attrition;
+    }
+    available.push(current);
+    const baseYield = 0.97 - 0.015 * i;
+    const yieldRate = clamp(baseYield + randNormal() * 0.02, 0.80, 0.99);
+    passed.push(Math.round(current * yieldRate));
+  });
+  return { stages: STAGES, available, passed };
+}
+
+function generateLeakage(n, mu, sigma){
+  const out = [];
+  for (let i = 0; i < n; i++){
+    out.push(clamp(randLognormal(mu, sigma), 0, 50000));
+  }
+  return out;
+}
+
+function generateBatches(nBatches, nPerBatch){
+  const batches = [];
+  for (let b = 0; b < nBatches; b++){
+    const mu = 6.2 + randNormal() * 0.25;
+    const sigma = 1.3 + Math.abs(randNormal() * 0.1);
+    batches.push(generateLeakage(nPerBatch, mu, sigma));
+  }
+  return batches;
+}
+
+function generateMultiTest(n){
+  const sensorIds = Array.from({length:n}, (_, i) => i + 1);
+  const trueValues = Array.from({length:n}, () => randLognormal(6.0, 0.6));
+  const siteBias = { VQC: 1.00, SQC: 1.03, NISER: 0.97 };
+  const measurements = {};
+  Object.entries(siteBias).forEach(([site, bias]) => {
+    measurements[site] = trueValues.map(v => v * bias + randNormal() * 0.05 * v);
+  });
+  return { sensorIds, measurements };
+}
+
+function histCounts(arr, edges){
+  const counts = new Array(edges.length - 1).fill(0);
+  arr.forEach(v => {
+    for (let i = 0; i < edges.length - 1; i++){
+      if (v >= edges[i] && v < edges[i+1]){ counts[i]++; break; }
+    }
+  });
+  return counts;
+}
+
+// ---- Build the demo dataset (deterministic, seed = 42) ----
+const availabilityData = generateAvailability();
+const leakageAll = generateLeakage(300, 6.2, 1.3);
+const batches = generateBatches(3, 80);
+const multiTest = generateMultiTest(20);
+
+/* =========================================================================
+   CHART PRIMITIVES  (hand-built SVG bar & line charts, no dependencies)
+   ========================================================================= */
+const SVGNS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs = {}){
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function resolveColor(v){
+  if (v.startsWith('var(')){
+    const name = v.slice(4, -1).trim();
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  return v;
+}
+function niceMax(value){
+  if (value <= 0) return 1;
+  const exp = Math.floor(Math.log10(value));
+  const base = Math.pow(10, exp);
+  const frac = value / base;
+  let niceFrac;
+  if (frac <= 1) niceFrac = 1;
+  else if (frac <= 2) niceFrac = 2;
+  else if (frac <= 5) niceFrac = 5;
+  else niceFrac = 10;
+  return niceFrac * base;
+}
+
+const tooltip = document.getElementById('tooltip');
+function showTooltip(e, text){
+  tooltip.textContent = text;
+  tooltip.style.opacity = '1';
+  moveTooltip(e);
+}
+function moveTooltip(e){
+  tooltip.style.left = (e.clientX + 14) + 'px';
+  tooltip.style.top = (e.clientY + 14) + 'px';
+}
+function hideTooltip(){ tooltip.style.opacity = '0'; }
+
+// Generic bar chart: supports stacked or grouped series.
+function renderBarChart(container, { labels, series, stacked = false, yLabel = '', showTotalLabel = false }){
+  container.innerHTML = '';
+  const width = Math.max(container.clientWidth, 320) || 700;
+  const height = 360;
+  const margin = { top: 20, right: 16, bottom: 56, left: 54 };
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, width: '100%', height, class: 'chart-svg' });
+
+  let maxVal = 0;
+  labels.forEach((_, i) => {
+    if (stacked){
+      const sum = series.reduce((acc, s) => acc + s.values[i], 0);
+      maxVal = Math.max(maxVal, sum);
+    } else {
+      series.forEach(s => { maxVal = Math.max(maxVal, s.values[i]); });
+    }
+  });
+  maxVal = niceMax(maxVal * 1.15);
+
+  const yScale = v => innerH - (v / maxVal) * innerH;
+  const groupW = innerW / labels.length;
+  const barPad = groupW * 0.16;
+
+  const ticks = 5;
+  for (let t = 0; t <= ticks; t++){
+    const val = maxVal * t / ticks;
+    const y = margin.top + yScale(val);
+    svg.appendChild(svgEl('line', { x1: margin.left, x2: margin.left + innerW, y1: y, y2: y, class: 'gridline' }));
+    const text = svgEl('text', { x: margin.left - 8, y: y + 4, class: 'axis-label', 'text-anchor': 'end' });
+    text.textContent = Math.round(val).toLocaleString();
+    svg.appendChild(text);
+  }
+
+  labels.forEach((label, i) => {
+    const groupX = margin.left + i * groupW;
+    if (stacked){
+      let yOffset = 0;
+      const barW = groupW - barPad * 2;
+      series.forEach(s => {
+        const val = s.values[i];
+        const yTop = yScale(yOffset + val);
+        const yBottom = yScale(yOffset);
+        const barH = Math.max(yBottom - yTop, 0);
+        const rect = svgEl('rect', {
+          x: groupX + barPad, y: margin.top + yTop, width: barW, height: barH,
+          fill: resolveColor(s.color), class: 'bar', rx: 3
+        });
+        rect.addEventListener('mouseenter', e => showTooltip(e, `${s.name} — ${label}: ${val.toLocaleString()}`));
+        rect.addEventListener('mousemove', moveTooltip);
+        rect.addEventListener('mouseleave', hideTooltip);
+        svg.appendChild(rect);
+        yOffset += val;
+      });
+      if (showTotalLabel){
+        const text = svgEl('text', { x: groupX + groupW/2, y: margin.top + yScale(yOffset) - 8, class: 'bar-total', 'text-anchor': 'middle' });
+        text.textContent = yOffset.toLocaleString();
+        svg.appendChild(text);
+      }
+    } else {
+      const subW = (groupW - barPad * 2) / series.length;
+      series.forEach((s, si) => {
+        const val = s.values[i];
+        const yTop = yScale(val);
+        let barH = Math.max(innerH - yTop, 0);
+        if (val > 0 && barH < 3) barH = 3; // keep rare non-zero counts visible
+        const rect = svgEl('rect', {
+          x: groupX + barPad + si * subW, y: margin.top + innerH - barH, width: subW * 0.82, height: barH,
+          fill: resolveColor(s.color), class: 'bar', rx: 3
+        });
+        rect.addEventListener('mouseenter', e => showTooltip(e, `${s.name} — ${label}: ${val.toLocaleString()}`));
+        rect.addEventListener('mousemove', moveTooltip);
+        rect.addEventListener('mouseleave', hideTooltip);
+        svg.appendChild(rect);
+      });
+    }
+    const xText = svgEl('text', { x: groupX + groupW/2, y: margin.top + innerH + 22, class: 'axis-label', 'text-anchor': 'middle' });
+    xText.textContent = label;
+    svg.appendChild(xText);
+  });
+
+  svg.appendChild(svgEl('line', { x1: margin.left, x2: margin.left, y1: margin.top, y2: margin.top + innerH, class: 'axis-line' }));
+  svg.appendChild(svgEl('line', { x1: margin.left, x2: margin.left + innerW, y1: margin.top + innerH, y2: margin.top + innerH, class: 'axis-line' }));
+
+  if (yLabel){
+    const yl = svgEl('text', { x: -(margin.top + innerH/2), y: 16, class: 'axis-title', transform: 'rotate(-90)', 'text-anchor': 'middle' });
+    yl.textContent = yLabel;
+    svg.appendChild(yl);
+  }
+
+  container.appendChild(svg);
+}
+
+// Multi-series line chart with point markers.
+function renderLineChart(container, { xLabels, series, yLabel = '' }){
+  container.innerHTML = '';
+  const width = Math.max(container.clientWidth, 320) || 800;
+  const height = 380;
+  const margin = { top: 20, right: 16, bottom: 46, left: 54 };
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, width: '100%', height, class: 'chart-svg' });
+
+  let maxVal = 0, minVal = Infinity;
+  series.forEach(s => s.values.forEach(v => { maxVal = Math.max(maxVal, v); minVal = Math.min(minVal, v); }));
+  maxVal = niceMax(maxVal * 1.1);
+  minVal = Math.max(0, Math.floor((minVal * 0.85) / 50) * 50);
+
+  const xScale = i => margin.left + (xLabels.length === 1 ? innerW/2 : (i / (xLabels.length - 1)) * innerW);
+  const yScale = v => margin.top + innerH - ((v - minVal) / (maxVal - minVal)) * innerH;
+
+  const ticks = 5;
+  for (let t = 0; t <= ticks; t++){
+    const val = minVal + (maxVal - minVal) * t / ticks;
+    const y = yScale(val);
+    svg.appendChild(svgEl('line', { x1: margin.left, x2: margin.left + innerW, y1: y, y2: y, class: 'gridline' }));
+    const text = svgEl('text', { x: margin.left - 8, y: y + 4, class: 'axis-label', 'text-anchor': 'end' });
+    text.textContent = Math.round(val).toLocaleString();
+    svg.appendChild(text);
+  }
+
+  xLabels.forEach((lab, i) => {
+    if (xLabels.length > 20 && i % 2 !== 0) return; // thin labels if crowded
+    const text = svgEl('text', { x: xScale(i), y: margin.top + innerH + 20, class: 'axis-label', 'text-anchor': 'middle' });
+    text.textContent = lab;
+    svg.appendChild(text);
+  });
+
+  series.forEach(s => {
+    let d = '';
+    s.values.forEach((v, i) => {
+      const x = xScale(i), y = yScale(v);
+      d += (i === 0 ? 'M' : 'L') + x + ',' + y + ' ';
+    });
+    svg.appendChild(svgEl('path', { d, fill: 'none', stroke: resolveColor(s.color), 'stroke-width': 2, class: 'line-path' }));
+  });
+  // draw points after lines so markers sit on top
+  series.forEach(s => {
+    s.values.forEach((v, i) => {
+      const x = xScale(i), y = yScale(v);
+      const c = svgEl('circle', { cx: x, cy: y, r: 4, fill: resolveColor(s.color), class: 'line-point' });
+      c.addEventListener('mouseenter', e => showTooltip(e, `${s.name} · Sensor ${xLabels[i]}: ${v.toFixed(1)} nA`));
+      c.addEventListener('mousemove', moveTooltip);
+      c.addEventListener('mouseleave', hideTooltip);
+      svg.appendChild(c);
+    });
+  });
+
+  svg.appendChild(svgEl('line', { x1: margin.left, x2: margin.left, y1: margin.top, y2: margin.top + innerH, class: 'axis-line' }));
+  svg.appendChild(svgEl('line', { x1: margin.left, x2: margin.left + innerW, y1: margin.top + innerH, y2: margin.top + innerH, class: 'axis-line' }));
+
+  if (yLabel){
+    const yl = svgEl('text', { x: -(margin.top + innerH/2), y: 16, class: 'axis-title', transform: 'rotate(-90)', 'text-anchor': 'middle' });
+    yl.textContent = yLabel;
+    svg.appendChild(yl);
+  }
+
+  container.appendChild(svg);
+}
+
+// Pipeline flow diagram — the dashboard's signature visual element.
+function renderPipeline(container, { stages, available, passed }){
+  container.innerHTML = '';
+  const width = Math.max(container.clientWidth, 320) || 1100;
+  const height = 150;
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, width: '100%', height, class: 'pipeline-svg' });
+
+  const n = stages.length;
+  const padX = 76;
+  const usableW = width - padX * 2;
+  const stepX = n > 1 ? usableW / (n - 1) : 0;
+  const cy = 56;
+  const maxAvail = Math.max(...available);
+  const minR = 22, maxR = 38;
+
+  for (let i = 0; i < n - 1; i++){
+    const x1 = padX + i * stepX, x2 = padX + (i + 1) * stepX;
+    svg.appendChild(svgEl('line', { x1: x1 + maxR, x2: x2 - maxR, y1: cy, y2: cy, class: 'pipe-connector' }));
+  }
+
+  stages.forEach((s, i) => {
+    const x = padX + i * stepX;
+    const r = minR + (maxR - minR) * (available[i] / maxAvail);
+    const yieldPct = (passed[i] / available[i]) * 100;
+
+    const circle = svgEl('circle', { cx: x, cy, r, class: 'pipe-circle' });
+    svg.appendChild(circle);
+
+    const num = svgEl('text', { x, y: cy - r - 14, class: 'pipe-index', 'text-anchor': 'middle' });
+    num.textContent = String(i + 1).padStart(2, '0');
+    svg.appendChild(num);
+
+    const val = svgEl('text', { x, y: cy + 5, class: 'pipe-value', 'text-anchor': 'middle' });
+    val.textContent = available[i];
+    svg.appendChild(val);
+
+    const label = svgEl('text', { x, y: cy + r + 22, class: 'pipe-label', 'text-anchor': 'middle' });
+    label.textContent = s;
+    svg.appendChild(label);
+
+    const yld = svgEl('text', { x, y: cy + r + 38, class: 'pipe-yield', 'text-anchor': 'middle' });
+    yld.textContent = yieldPct.toFixed(1) + '% pass';
+    svg.appendChild(yld);
+  });
+
+  container.appendChild(svg);
+}
+
+/* =========================================================================
+   KPI CARD HELPERS
+   ========================================================================= */
+function kpiCard(label, value, sub = '', valueClass = ''){
+  return `<div class="kpi-card">
+    <div class="kpi-label">${label}</div>
+    <div class="kpi-value ${valueClass}">${value}</div>
+    ${sub ? `<div class="kpi-sub">${sub}</div>` : ''}
+  </div>`;
+}
+
+/* =========================================================================
+   PANEL RENDERERS
+   ========================================================================= */
+function renderAvailabilityPanel(){
+  const { stages, available, passed } = availabilityData;
+  const failed = available.map((a, i) => a - passed[i]);
+  const finalYield = (passed[passed.length - 1] / available[0]) * 100;
+  const lost = available[0] - available[available.length - 1];
+
+  document.getElementById('availKpis').innerHTML = [
+    kpiCard('Total Received', available[0].toLocaleString(), 'at DCA intake'),
+    kpiCard('Reached Module Production', available[available.length - 1].toLocaleString(), `${lost} lost in pipeline`, 'accent'),
+    kpiCard('Currently Passing', passed[passed.length - 1].toLocaleString(), 'at final stage'),
+    kpiCard('End-to-End Yield', finalYield.toFixed(1) + '%', 'DCA → Module Production', finalYield > 80 ? 'accent' : 'warn'),
+  ].join('');
+
+  renderBarChart(document.getElementById('availChart'), {
+    labels: stages,
+    series: [
+      { name: 'Passed', color: 'var(--cyan)', values: passed },
+      { name: 'Failed / held back', color: 'var(--coral)', values: failed },
+    ],
+    stacked: true,
+    yLabel: 'Sensors',
+    showTotalLabel: true,
+  });
+}
+
+function renderLeakageOverallPanel(){
+  const counts = histCounts(leakageAll, BIN_EDGES);
+  const med = median(leakageAll);
+  const avg = mean(leakageAll);
+  const flagged = leakageAll.filter(v => v > 2000).length;
+  const critical = counts[3];
+
+  document.getElementById('leakKpis').innerHTML = [
+    kpiCard('Sensors Tested', leakageAll.length.toLocaleString(), 'overall population'),
+    kpiCard('Median Leakage', med.toFixed(0) + ' nA', 'central tendency'),
+    kpiCard('Mean Leakage', avg.toFixed(0) + ' nA', 'skewed by tail'),
+    kpiCard('Flagged (>2000 nA)', flagged + ' (' + (flagged/leakageAll.length*100).toFixed(1) + '%)', critical + ' critical (>10000 nA)', flagged > 0 ? 'warn' : 'accent'),
+  ].join('');
+
+  renderBarChart(document.getElementById('leakChart'), {
+    labels: BIN_LABELS,
+    series: [{ name: 'Sensors', color: 'var(--cyan)', values: counts }],
+    stacked: false,
+    yLabel: 'Number of Sensors',
+  });
+  // Recolor bars individually for severity gradient
+  colorizeSingleSeriesBars('#leakChart', BIN_COLORS);
+}
+
+// Helper: after a single-series bar chart renders, recolor each bar distinctly.
+function colorizeSingleSeriesBars(containerSel, colors){
+  const rects = document.querySelectorAll(containerSel + ' rect.bar');
+  rects.forEach((r, i) => { r.setAttribute('fill', resolveColor(colors[i % colors.length])); });
+}
+
+let currentBatch = 1;
+function renderBatchPanel(batchIndex){
+  currentBatch = batchIndex;
+  document.querySelectorAll('.batch-btn').forEach(b => {
+    b.classList.toggle('active', Number(b.dataset.batch) === batchIndex);
+  });
+
+  const batchData = batches[batchIndex - 1];
+  const batchCounts = histCounts(batchData, BIN_EDGES);
+  const overallCounts = histCounts(leakageAll, BIN_EDGES);
+  const scale = batchData.length / leakageAll.length;
+  const overallScaled = overallCounts.map(c => Math.round(c * scale * 10) / 10);
+
+  const med = median(batchData);
+  const overallMed = median(leakageAll);
+  const delta = med - overallMed;
+  const flagged = batchData.filter(v => v > 2000).length;
+
+  document.getElementById('batchKpis').innerHTML = [
+    kpiCard(`Batch ${batchIndex} Size`, batchData.length.toLocaleString(), 'sensors in batch'),
+    kpiCard('Median Leakage', med.toFixed(0) + ' nA', `overall: ${overallMed.toFixed(0)} nA`),
+    kpiCard('Delta vs Overall', (delta >= 0 ? '+' : '') + delta.toFixed(0) + ' nA', delta > 0 ? 'higher than fleet median' : 'lower than fleet median', Math.abs(delta) > 100 ? 'warn' : 'accent'),
+    kpiCard('Flagged (>2000 nA)', flagged + ' (' + (flagged/batchData.length*100).toFixed(1) + '%)', 'within this batch', flagged/batchData.length > 0.15 ? 'flag' : 'accent'),
+  ].join('');
+
+  renderBarChart(document.getElementById('batchChart'), {
+    labels: BIN_LABELS,
+    series: [
+      { name: `Batch ${batchIndex}`, color: 'var(--cyan)', values: batchCounts },
+      { name: 'Overall (scaled)', color: 'var(--text-faint)', values: overallScaled },
+    ],
+    stacked: false,
+    yLabel: 'Number of Sensors',
+  });
+
+  const verdict = Math.abs(delta) > 150
+    ? `<b>Batch ${batchIndex} deviates notably</b> from the overall population (Δmedian = ${delta.toFixed(0)} nA). Recommend flagging this lot for wafer-level review.`
+    : `<b>Batch ${batchIndex} is consistent</b> with the overall population (Δmedian = ${delta.toFixed(0)} nA). No batch-specific action indicated.`;
+  document.getElementById('batchNote').innerHTML = verdict;
+}
+
+function renderMultiTestPanel(){
+  const { sensorIds, measurements } = multiTest;
+  const sites = Object.keys(measurements);
+
+  // Compute per-sensor spread across sites as a simple consistency metric
+  const spreads = sensorIds.map((_, i) => {
+    const vals = sites.map(s => measurements[s][i]);
+    return Math.max(...vals) - Math.min(...vals);
+  });
+  const maxSpreadIdx = spreads.indexOf(Math.max(...spreads));
+  const avgSpread = mean(spreads);
+
+  // Mean per-site value to illustrate systematic offsets
+  const siteMeans = sites.map(s => mean(measurements[s]));
+
+  document.getElementById('multiKpis').innerHTML = [
+    kpiCard('Sensors Compared', sensorIds.length, 'VQC · SQC · NISER'),
+    kpiCard('Avg. Cross-Site Spread', avgSpread.toFixed(1) + ' nA', 'max − min per sensor'),
+    kpiCard('Largest Disagreement', `Sensor ${sensorIds[maxSpreadIdx]}`, spreads[maxSpreadIdx].toFixed(1) + ' nA spread', 'warn'),
+    kpiCard('Site Mean Offset', `${(siteMeans[1]-siteMeans[0]).toFixed(1)} / ${(siteMeans[2]-siteMeans[0]).toFixed(1)} nA`, 'SQC / NISER vs VQC'),
+  ].join('');
+
+  renderLineChart(document.getElementById('multiChart'), {
+    xLabels: sensorIds,
+    series: [
+      { name: 'VQC', color: 'var(--cyan)', values: measurements.VQC },
+      { name: 'SQC', color: 'var(--amber)', values: measurements.SQC },
+      { name: 'NISER', color: 'var(--violet)', values: measurements.NISER },
+    ],
+    yLabel: 'Leakage Current (nA)',
+  });
+}
+
+/* =========================================================================
+   WIRING: tabs, batch selector, resize, initial render
+   ========================================================================= */
+const panelRenderers = {
+  'panel-availability': renderAvailabilityPanel,
+  'panel-leakage-overall': renderLeakageOverallPanel,
+  'panel-leakage-batch': () => renderBatchPanel(currentBatch),
+  'panel-multitest': renderMultiTestPanel,
+};
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const target = btn.dataset.target;
+    document.getElementById(target).classList.add('active');
+    panelRenderers[target]();
+  });
+});
+
+document.querySelectorAll('.batch-btn').forEach(btn => {
+  btn.addEventListener('click', () => renderBatchPanel(Number(btn.dataset.batch)));
+});
+
+window.addEventListener('resize', () => {
+  const activeTab = document.querySelector('.tab-btn.active');
+  if (activeTab) panelRenderers[activeTab.dataset.target]();
+});
+
+// Sync timestamp (live clock, purely cosmetic for the demo)
+document.getElementById('syncTime').textContent = 'Last synced: ' + new Date().toLocaleString();
+
+// Initial paint
+renderPipeline(document.getElementById('pipeline'), availabilityData);
+renderAvailabilityPanel();
+</script>
+
+</body>
+</html>
